@@ -1,0 +1,6 @@
+PySide6
+pyqtdarktheme
+Pillow
+scikit-image
+torch
+lpips
