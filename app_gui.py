@@ -22,11 +22,13 @@ from PySide6.QtWidgets import (
     QComboBox,
     QCheckBox,
     QMessageBox,
+    QGridLayout,
 )
 from PySide6.QtCore import QThread, Signal
 from image_view import ImageView
 from graphics_view import GraphicsView
 from metrics import ImageMetrics
+import math
 
 
 class MetricsCalculationThread(QThread):
@@ -97,6 +99,12 @@ class AppGui(QVBoxLayout):
         self.resolution_combo.setFixedWidth(100)
         self.resolution_combo.currentTextChanged.connect(self.set_resolution)
 
+        # Panel Layout Selection
+        self.layout_label = QLabel("Layout")
+        self.layout_combo = QComboBox()
+        self.layout_combo.setFixedWidth(80)
+        self.layout_combo.currentTextChanged.connect(self.change_panel_layout)
+
         # Antialiasing checkbox
         self.antialiasing_checkbox = QCheckBox("Antialiasing")
         self.antialiasing_checkbox.setChecked(False)  # Set default to unchecked
@@ -109,6 +117,8 @@ class AppGui(QVBoxLayout):
         self.top_settings_layout.addStretch()
         self.top_settings_layout.addWidget(self.resolution_label)
         self.top_settings_layout.addWidget(self.resolution_combo)
+        self.top_settings_layout.addWidget(self.layout_label)
+        self.top_settings_layout.addWidget(self.layout_combo)
         self.top_settings_layout.addWidget(self.antialiasing_checkbox)
         self.top_settings_layout.addWidget(self.calculate_metrics_checkbox)
         self.top_settings_layout.addStretch()
@@ -116,8 +126,10 @@ class AppGui(QVBoxLayout):
         # Images comparison
         self.images_widget = QWidget()
 
-        self.image_views_layout = QHBoxLayout()
+        # Use QGridLayout for flexible panel arrangement
+        self.image_views_layout = QGridLayout()
         self.image_views_layout.setSpacing(0)
+        self.images_widget.setLayout(self.image_views_layout)
 
         # Layout with remove and add button
         self.add_remove_image_layout = QHBoxLayout()
@@ -125,6 +137,7 @@ class AppGui(QVBoxLayout):
         self.remove_button.setText("-")
         self.remove_button.setFixedSize(30, 30)
         self.remove_button.pressed.connect(self.remove_image_view)
+
         self.add_button = QPushButton()
         self.add_button.setText("+")
         self.add_button.setFixedSize(30, 30)
@@ -138,27 +151,121 @@ class AppGui(QVBoxLayout):
         # Bottom bar
         self.bottom_settings_layout = QHBoxLayout()
 
-        self.save_comparison_button = QPushButton()
-        self.save_comparison_button.setText("Save comparison")
-        self.save_comparison_button.setFixedWidth(200)
-        self.save_comparison_button.pressed.connect(self.save_comparison)
-
-        self.bottom_settings_layout.addWidget(self.save_comparison_button)
-
-        self.images_widget.setLayout(self.image_views_layout)
-
-        self.status_bar = QStatusBar()
-        self.version = QLabel("Image Comparer v0.5")
-        self.resolution_status = QLabel("None")
-        self.status_bar.addWidget(self.version)
-        self.status_bar.addWidget(self.resolution_status)
-
-        self.main_window.setStatusBar(self.status_bar)
-
         self.addLayout(self.top_settings_layout)
         self.addWidget(self.images_widget)
         self.addLayout(self.add_remove_image_layout)
         self.addLayout(self.bottom_settings_layout)
+
+    def calculate_layout_options(self, num_panels):
+        """Calculate possible grid arrangements for given number of panels"""
+        if num_panels <= 0:
+            return []
+        
+        options = []
+        
+        # Find all divisor pairs
+        for rows in range(1, num_panels + 1):
+            if num_panels % rows == 0:
+                cols = num_panels // rows
+                options.append((rows, cols))
+        
+        # For non-perfect divisions (like 5 panels), add practical arrangements
+        if len(options) == 2:  # Only 1xN and Nx1 (prime numbers)
+            # Add some practical arrangements for prime numbers
+            sqrt_n = int(math.sqrt(num_panels))
+            for rows in range(sqrt_n, sqrt_n + 2):
+                cols = math.ceil(num_panels / rows)
+                if rows * cols >= num_panels and (rows, cols) not in options:
+                    options.append((rows, cols))
+        
+        # Sort by aspect ratio preference (closer to square first)
+        options.sort(key=lambda x: abs(x[0] - x[1]))
+        
+        return options
+
+    def update_layout_combo(self):
+        """Update layout dropdown based on current number of panels"""
+        num_panels = len(self.image_views)
+        self.layout_combo.clear()
+        
+        if num_panels == 0:
+            return
+        
+        options = self.calculate_layout_options(num_panels)
+        
+        # Find the 1×n (horizontal) option index
+        horizontal_index = 0
+        for i, (rows, cols) in enumerate(options):
+            if rows == 1:
+                label = f"1×{cols} (Horizontal)"
+                horizontal_index = i
+            elif cols == 1:
+                label = f"{rows}×1 (Vertical)"
+            else:
+                label = f"{rows}×{cols} (Grid)"
+            
+            self.layout_combo.addItem(label, (rows, cols))
+        
+        # Set default to horizontal layout (1×n)
+        if options:
+            self.layout_combo.setCurrentIndex(horizontal_index)
+
+    def change_panel_layout(self):
+        """Change the panel layout based on selected option"""
+        if not self.layout_combo.currentData():
+            return
+        
+        rows, cols = self.layout_combo.currentData()
+        self.arrange_panels_in_grid(rows, cols)
+
+    def arrange_panels_in_grid(self, rows, cols):
+        """Arrange panels in specified grid layout"""
+        # Remove all widgets from layout
+        while self.image_views_layout.count():
+            child = self.image_views_layout.takeAt(0)
+            if child.layout():
+                child.layout().setParent(None)
+        
+        # Reset stretch factors
+        for i in range(self.image_views_layout.columnCount()):
+            self.image_views_layout.setColumnStretch(i, 0)
+        for i in range(self.image_views_layout.rowCount()):
+            self.image_views_layout.setRowStretch(i, 0)
+        
+        # Add panels to grid layout
+        for i, view in enumerate(self.image_views):
+            row = i // cols
+            col = i % cols
+            self.image_views_layout.addLayout(view, row, col)
+        
+        # Set equal stretch factors for all used columns and rows
+        for col in range(cols):
+            self.image_views_layout.setColumnStretch(col, 1)
+        for row in range(rows):
+            self.image_views_layout.setRowStretch(row, 1)
+
+    def add_image_view(self, color=None, name="", text_color="white"):
+        graphics_view = GraphicsView(color, name=name, text_color=text_color)
+        graphics_view.image_view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        graphics_view.image_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        graphics_view.image_view.horizontalScrollBar().valueChanged.connect(
+            partial(self.slider_sync, "horizontal")
+        )
+        graphics_view.image_view.verticalScrollBar().valueChanged.connect(
+            partial(self.slider_sync, "vertical")
+        )
+        graphics_view.image_view.photoAdded.connect(self.add_resolution)
+        graphics_view.image_view.tranformChanged.connect(self.set_transform)
+        graphics_view.image_view.multipleUrls.connect(self.load_multiple_images)
+
+        # Insert at the beginning instead of appending at the end
+        self.image_views.insert(0, graphics_view)
+        
+        # Update layout options and rearrange
+        self.update_layout_combo()
+        if self.layout_combo.currentData():
+            rows, cols = self.layout_combo.currentData()
+            self.arrange_panels_in_grid(rows, cols)
 
     def toggle_metrics(self):
         """Calculate and display metrics when checkbox is checked"""
@@ -213,23 +320,6 @@ class AppGui(QVBoxLayout):
         """Legacy method - now redirects to threaded calculation"""
         self.start_metrics_calculation()
 
-    def add_image_view(self, color=None, name="", text_color="white"):
-        graphics_view = GraphicsView(color, name=name, text_color=text_color)
-        graphics_view.image_view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        graphics_view.image_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        graphics_view.image_view.horizontalScrollBar().valueChanged.connect(
-            partial(self.slider_sync, "horizontal")
-        )
-        graphics_view.image_view.verticalScrollBar().valueChanged.connect(
-            partial(self.slider_sync, "vertical")
-        )
-        graphics_view.image_view.photoAdded.connect(self.add_resolution)
-        graphics_view.image_view.tranformChanged.connect(self.set_transform)
-        graphics_view.image_view.multipleUrls.connect(self.load_multiple_images)
-
-        self.image_views_layout.addLayout(graphics_view)
-        self.image_views.append(graphics_view)
-
     def load_images(self, items, text_color):
         # Clear existing image views
         while self.image_views:
@@ -240,12 +330,26 @@ class AppGui(QVBoxLayout):
             view_to_remove.deleteLater()
 
         image_paths = [item["path"] for item in items.values()]
-        for name, details in items.items():
+        
+        # Process items in reverse order since add_image_view inserts at beginning
+        items_list = list(items.items())
+        for name, details in reversed(items_list):
             color = details.get("color", None)  # Use None if color not specified
             self.add_image_view(
                 color=color, name=name, text_color=text_color
             )
-            self.image_views[-1].image_view.loadImage(details["path"])
+            # Since add_image_view inserts at beginning, load image into first panel
+            self.image_views[0].image_view.loadImage(details["path"])
+            
+            # Apply current antialiasing state to the newly loaded image
+            antialiasing_enabled = self.antialiasing_checkbox.isChecked()
+            self.image_views[0].image_view.set_antialiasing(antialiasing_enabled)
+
+        # Update layout after loading all images
+        self.update_layout_combo()
+        if self.layout_combo.currentData():
+            rows, cols = self.layout_combo.currentData()
+            self.arrange_panels_in_grid(rows, cols)
 
         if self.calculate_metrics_checkbox.isChecked():
             gt_image_path = image_paths[-1]
@@ -283,12 +387,19 @@ class AppGui(QVBoxLayout):
             return
 
     def remove_image_view(self):
-        if len(self.image_views) > 2:
-            self.image_views_layout.removeItem(self.image_views[-1])
-            self.image_views[-1].deleteLater()
-            self.image_views[-1].image_view.deleteLater()
-            self.image_views[-1].text_view.deleteLater()
-            self.image_views.remove(self.image_views[-1])
+        if self.image_views:
+            # Remove from first position to be consistent with add behavior
+            view_to_remove = self.image_views.pop(0)
+            self.image_views_layout.removeItem(view_to_remove)
+            view_to_remove.image_view.deleteLater()
+            view_to_remove.text_view.deleteLater()
+            view_to_remove.deleteLater()
+            
+            # Update layout options and rearrange
+            self.update_layout_combo()
+            if self.layout_combo.currentData():
+                rows, cols = self.layout_combo.currentData()
+                self.arrange_panels_in_grid(rows, cols)
 
     def set_transform(self, *args):
         for item in self.image_views:
@@ -315,9 +426,6 @@ class AppGui(QVBoxLayout):
                     )
                 )
             item.image_view.setSceneRect(0, 0, int(resolution[0]), int(resolution[1]))
-            item.image_view.setSceneRect(0, 0, int(resolution[0]), int(resolution[1]))
-            self.resolution_status.setText("x".join(resolution))
-            self.resolution_status.setStyleSheet("color: lime")
 
     def add_resolution(self, width, height):
         resolution = f"{width}x{height}"

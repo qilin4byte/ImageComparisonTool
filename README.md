@@ -7,11 +7,11 @@ An advanced image comparison tool with metric calculation capabilities. This app
 ## Features
 
 - **Multi-Image Comparison:** View and compare multiple images simultaneously with customizable layouts
+- **Flexible Panel Layouts:** Dynamic grid arrangements (1×N, 2×2, 2×3, 3×2, etc.) for any number of images
 - **Synchronized Navigation:** Scroll and zoom across all images simultaneously for precise comparison
 - **Configurable Interface:** Customize image names, background colors, and text colors
 - **Metric Calculation:** Optional PSNR, SSIM, and LPIPS metric calculation against ground truth
 - **Easy Configuration:** Simple dictionary-based setup for default images and settings
-- **Modern UI:** Dark theme with antialiasing support for better visual experience
 
 ## Getting Started
 
@@ -27,7 +27,7 @@ Make sure you have the following prerequisites installed:
 1. Clone or download this repository:
 
    ```shell
-   git clone <repository-url>
+   git clone https://code.byted.org/qilin.deng/ImageComparator.git
    cd image_comparator
    ```
 
@@ -87,21 +87,10 @@ python main.py
 
 ### Controls
 - **Resolution Dropdown:** Change the display resolution of images
+- **Layout Dropdown:** Switch between available grid arrangements (1×N, 2×2, etc.)
 - **Antialiasing Checkbox:** Toggle smooth image rendering (unchecked by default for better performance)
 - **Calculate Metrics Checkbox:** Enable/disable metric calculations (unchecked by default for faster loading)
 
-### Metric Calculations
-The application features **responsive metrics calculation** with the following user experience:
-
-#### How to Use Metrics:
-1. **Load your images** first (either through default configuration or drag & drop)
-2. **Click the "Calculate Metrics" checkbox** - it will be checked immediately
-3. **Metrics calculate in the background** - the UI remains responsive
-4. **Results appear progressively** in the terminal as each metric is computed
-
-#### Technical Details:
-- **Background Processing:** Metrics calculation runs in a separate thread
-- **Ground Truth:** The last image in your configuration is automatically used as ground truth
 
 #### Sample Terminal Output:
 When you check the "Calculate Metrics" box, you'll see output like this in your terminal:
@@ -130,13 +119,10 @@ Metrics calculation completed!
 - **SSIM (Structural Similarity Index):** Measures structural similarity (0-1, higher is better)
 - **LPIPS (Learned Perceptual Image Patch Similarity):** Perceptual similarity using deep learning (lower is better)
 
-### Adding/Removing Views
-- **+ Button:** Add a new image view
-- **- Button:** Remove the last image view
-
 ### Loading New Images
 - **Drag and Drop:** Drop image files directly onto any view
 - **Multiple Files:** Drop multiple files to load them into separate views
+- **Panel Integration:** Dropped images automatically integrate with the current layout system
 
 ## Customization
 
@@ -174,14 +160,6 @@ image_comparator/
 └── screenshot.png      # Application screenshot
 ```
 
-## Dependencies
-
-- **PySide6:** GUI framework
-- **pyqtdarktheme:** Dark theme support
-- **Pillow:** Image processing
-- **scikit-image:** PSNR and SSIM calculations
-- **torch:** Deep learning framework for LPIPS
-- **lpips:** Learned Perceptual Image Patch Similarity metric
 
 ## Tips
 
@@ -192,18 +170,6 @@ image_comparator/
 5. **Progress Monitoring:** Watch the terminal to see metrics being calculated progressively for each image
 
 ## Troubleshooting
-
-### Import Errors
-If you encounter import errors, ensure all dependencies are installed:
-```shell
-pip install --upgrade PySide6 pyqtdarktheme Pillow scikit-image torch lpips
-```
-
-### Slow Performance
-- Disable metric calculations when not needed
-- Disable antialiasing for large images
-- Use appropriately sized images for your display
-- Enable antialiasing only when necessary
 
 ### LPIPS Model Download
 The first time you use LPIPS metrics, the model will be downloaded automatically. This may take a few minutes but only happens once.

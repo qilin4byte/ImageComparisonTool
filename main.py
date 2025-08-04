@@ -34,7 +34,8 @@ def main():
             "color": "#6E2C00",
         },
         "Output": {
-            "path": "/Users/bytedance/Documents/Data/NafNet_analysis/RealMCDataset/Fused-width64-LPIPS-L1-FixData/visualization/img_sorted/0000.png",
+            # "path": "/Users/bytedance/Documents/Data/NafNet_analysis/RealMCDataset/Fused-width64-LPIPS-L1-FixData/visualization/img_sorted/0000.png",
+            "path":"/Users/bytedance/Desktop/0002_0000.png",
             "color": "#004D40",
         },
         "GT": {
