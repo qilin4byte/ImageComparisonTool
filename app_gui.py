@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import QThread, Signal
 from image_view import ImageView
 from graphics_view import GraphicsView
+from curtain_view import CurtainComparisonWidget
 from metrics import ImageMetrics
 import math
 
@@ -89,6 +90,10 @@ class AppGui(QVBoxLayout):
         self.metrics_thread = None
 
         self.image_views = []
+        
+        # Curtain comparison mode
+        self.curtain_widget = None
+        self.is_curtain_mode = False
 
         # Top bar
         self.top_settings_layout = QHBoxLayout()
@@ -104,6 +109,11 @@ class AppGui(QVBoxLayout):
         self.layout_combo = QComboBox()
         self.layout_combo.setFixedWidth(80)
         self.layout_combo.currentTextChanged.connect(self.change_panel_layout)
+        
+        # Curtain comparison toggle
+        self.curtain_checkbox = QCheckBox("Curtain Mode")
+        self.curtain_checkbox.setChecked(False)
+        self.curtain_checkbox.stateChanged.connect(self.toggle_curtain_mode)
 
         # Antialiasing checkbox
         self.antialiasing_checkbox = QCheckBox("Antialiasing")
@@ -119,6 +129,7 @@ class AppGui(QVBoxLayout):
         self.top_settings_layout.addWidget(self.resolution_combo)
         self.top_settings_layout.addWidget(self.layout_label)
         self.top_settings_layout.addWidget(self.layout_combo)
+        self.top_settings_layout.addWidget(self.curtain_checkbox)
         self.top_settings_layout.addWidget(self.antialiasing_checkbox)
         self.top_settings_layout.addWidget(self.calculate_metrics_checkbox)
         self.top_settings_layout.addStretch()
@@ -130,6 +141,9 @@ class AppGui(QVBoxLayout):
         self.image_views_layout = QGridLayout()
         self.image_views_layout.setSpacing(0)
         self.images_widget.setLayout(self.image_views_layout)
+        
+        # Keep track of the original images widget for restoration
+        self.original_images_widget = self.images_widget
 
         # Layout with remove and add button
         self.add_remove_image_layout = QHBoxLayout()
@@ -261,9 +275,12 @@ class AppGui(QVBoxLayout):
         # Insert at the beginning instead of appending at the end
         self.image_views.insert(0, graphics_view)
         
-        # Update layout options and rearrange
+        # Update layout options and curtain availability
         self.update_layout_combo()
-        if self.layout_combo.currentData():
+        self.update_curtain_availability()
+        
+        # Rearrange in current layout (only if not in curtain mode)
+        if not self.is_curtain_mode and self.layout_combo.currentData():
             rows, cols = self.layout_combo.currentData()
             self.arrange_panels_in_grid(rows, cols)
 
@@ -345,9 +362,12 @@ class AppGui(QVBoxLayout):
             antialiasing_enabled = self.antialiasing_checkbox.isChecked()
             self.image_views[0].image_view.set_antialiasing(antialiasing_enabled)
 
-        # Update layout after loading all images
+        # Update layout and curtain availability after loading all images
         self.update_layout_combo()
-        if self.layout_combo.currentData():
+        self.update_curtain_availability()
+        
+        # Arrange in grid layout (only if not in curtain mode)
+        if not self.is_curtain_mode and self.layout_combo.currentData():
             rows, cols = self.layout_combo.currentData()
             self.arrange_panels_in_grid(rows, cols)
 
@@ -395,9 +415,12 @@ class AppGui(QVBoxLayout):
             view_to_remove.text_view.deleteLater()
             view_to_remove.deleteLater()
             
-            # Update layout options and rearrange
+            # Update layout options and curtain availability
             self.update_layout_combo()
-            if self.layout_combo.currentData():
+            self.update_curtain_availability()
+            
+            # Rearrange in current layout (only if not in curtain mode)
+            if not self.is_curtain_mode and self.layout_combo.currentData():
                 rows, cols = self.layout_combo.currentData()
                 self.arrange_panels_in_grid(rows, cols)
 
@@ -442,6 +465,104 @@ class AppGui(QVBoxLayout):
         enabled = state == 2  # Qt.Checked
         for item in self.image_views:
             item.image_view.set_antialiasing(enabled)
+
+    def toggle_curtain_mode(self, state):
+        """Toggle between curtain comparison mode and grid mode."""
+        should_enable_curtain = state == 2  # Qt.Checked
+        
+        if should_enable_curtain:
+            if len(self.image_views) == 2:
+                self.switch_to_curtain_mode()
+            else:
+                # Disable checkbox if not exactly 2 images
+                self.curtain_checkbox.blockSignals(True)
+                self.curtain_checkbox.setChecked(False)
+                self.curtain_checkbox.blockSignals(False)
+                QMessageBox.information(
+                    self.main_window, 
+                    "Curtain Mode", 
+                    "Curtain mode requires exactly 2 images.\nPlease add or remove images to have exactly 2 images."
+                )
+        else:
+            self.switch_to_grid_mode()
+    
+    def switch_to_curtain_mode(self):
+        """Switch to curtain comparison mode."""
+        if len(self.image_views) != 2:
+            return
+            
+        self.is_curtain_mode = True
+        
+        # Create curtain widget as a standalone widget
+        if self.curtain_widget:
+            self.curtain_widget.deleteLater()
+            
+        self.curtain_widget = CurtainComparisonWidget()
+        self.curtain_widget.setStyleSheet("background-color: black;")
+        
+        # Get image paths and names from the current views
+        if (len(self.image_views) >= 2 and 
+            self.image_views[0].image_view.url and 
+            self.image_views[1].image_view.url):
+            
+            before_path = self.image_views[0].image_view.url
+            after_path = self.image_views[1].image_view.url
+            before_name = self.image_views[0].text_view.text()
+            after_name = self.image_views[1].text_view.text()
+            
+            self.curtain_widget.set_images(before_path, after_path, before_name, after_name)
+        
+        # Remove the original images widget and replace with curtain widget
+        self.removeWidget(self.images_widget)
+        self.images_widget.setParent(None)  # Detach from layout
+        
+        # Insert curtain widget in the same position
+        self.insertWidget(1, self.curtain_widget)  # Position 1 is after top_settings_layout
+        
+        # Disable layout combo and +/- buttons in curtain mode
+        self.layout_combo.setEnabled(False)
+        self.add_button.setEnabled(False)
+        self.remove_button.setEnabled(False)
+    
+    def switch_to_grid_mode(self):
+        """Switch back to grid mode."""
+        self.is_curtain_mode = False
+        
+        # Remove curtain widget
+        if self.curtain_widget:
+            self.removeWidget(self.curtain_widget)
+            self.curtain_widget.deleteLater()
+            self.curtain_widget = None
+        
+        # Restore the original images widget
+        self.insertWidget(1, self.original_images_widget)  # Position 1 is after top_settings_layout
+        self.images_widget = self.original_images_widget
+        
+        # Re-arrange in current layout
+        if self.layout_combo.currentData():
+            rows, cols = self.layout_combo.currentData()
+            self.arrange_panels_in_grid(rows, cols)
+        
+        # Re-enable controls
+        self.layout_combo.setEnabled(True)
+        self.add_button.setEnabled(True)
+        self.remove_button.setEnabled(True)
+    
+    def update_curtain_availability(self):
+        """Update curtain mode availability based on number of images."""
+        has_exactly_two = len(self.image_views) == 2
+        
+        self.curtain_checkbox.setEnabled(has_exactly_two)
+        
+        if not has_exactly_two and self.is_curtain_mode:
+            # Auto-disable curtain mode if we don't have exactly 2 images
+            self.curtain_checkbox.blockSignals(True)
+            self.curtain_checkbox.setChecked(False)
+            self.curtain_checkbox.blockSignals(False)
+            self.switch_to_grid_mode()
+        elif has_exactly_two and self.curtain_checkbox.isChecked():
+            # Re-enable curtain mode if we have exactly 2 images and checkbox is checked
+            self.switch_to_curtain_mode()
 
     def save_comparison(self):
         file_dialog = QFileDialog()

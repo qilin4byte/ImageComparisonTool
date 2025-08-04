@@ -8,6 +8,7 @@ An advanced image comparison tool with metric calculation capabilities. This app
 
 - **Multi-Image Comparison:** View and compare multiple images simultaneously with customizable layouts
 - **Flexible Panel Layouts:** Dynamic grid arrangements (1×N, 2×2, 2×3, 3×2, etc.) for any number of images
+- **Curtain Comparison Mode:** Interactive before/after slider comparison for exactly 2 images
 - **Synchronized Navigation:** Scroll and zoom across all images simultaneously for precise comparison
 - **Configurable Interface:** Customize image names, background colors, and text colors
 - **Metric Calculation:** Optional PSNR, SSIM, and LPIPS metric calculation against ground truth
@@ -88,8 +89,44 @@ python main.py
 ### Controls
 - **Resolution Dropdown:** Change the display resolution of images
 - **Layout Dropdown:** Switch between available grid arrangements (1×N, 2×2, etc.)
+- **Curtain Mode Checkbox:** Enable interactive before/after comparison (only available with exactly 2 images)
 - **Antialiasing Checkbox:** Toggle smooth image rendering (unchecked by default for better performance)
 - **Calculate Metrics Checkbox:** Enable/disable metric calculations (unchecked by default for faster loading)
+
+### Curtain Comparison Mode
+
+When you have exactly **2 images** loaded, you can enable **Curtain Mode** for an interactive before/after comparison:
+
+#### How to Use Curtain Mode:
+1. **Load exactly 2 images** (through default configuration or drag & drop)
+2. **Click the "Curtain Mode" checkbox** - it becomes available when you have 2 images
+3. **Drag the circular slider** to reveal more of the "before" or "after" image
+4. **View labels** showing which image is which (positioned dynamically)
+
+#### Features:
+- **Interactive Slider:** Drag the white circular handle to adjust the comparison split
+- **Zoom & Pan Support:** Full zoom in/out and panning functionality just like grid mode
+- **Smart Mouse Interaction:** Click on slider handle to drag curtain, click elsewhere to pan image
+- **Smooth Comparison:** See exactly how areas change between the two images
+- **Dynamic Labels:** "Before" and "After" labels appear when there's enough space
+- **Professional Design:** Clean white slider with directional arrows
+- **Auto-scaling:** Images are automatically scaled to fit while maintaining aspect ratio
+
+#### Navigation in Curtain Mode:
+- **Mouse Wheel:** Zoom in/out on images (zooms toward mouse cursor)
+- **Left Click + Drag on Handle:** Adjust the curtain slider position
+- **Left Click + Drag on Image:** Pan around zoomed images
+- **Right Click:** Reset zoom and pan to default view
+- **Keyboard Shortcuts:**
+  - `R` or `Ctrl+0`: Reset view to default zoom/pan
+  - `+` or `=`: Zoom in
+  - `-`: Zoom out
+
+#### Use Cases:
+- **Before/After Processing:** Compare original vs processed images
+- **Method Comparison:** Compare results from two different algorithms
+- **Quality Assessment:** Evaluate image enhancement or restoration results
+- **Research Analysis:** Side-by-side comparison for academic presentations
 
 
 #### Sample Terminal Output:
