@@ -90,6 +90,7 @@ python main.py
 - **Resolution Dropdown:** Change the display resolution of images
 - **Layout Dropdown:** Switch between available grid arrangements (1×N, 2×2, etc.)
 - **Curtain Mode Checkbox:** Enable interactive before/after comparison (only available with exactly 2 images)
+- **Show Differences Checkbox:** Enable visual difference highlighting (only available in curtain mode)
 - **Antialiasing Checkbox:** Toggle smooth image rendering (unchecked by default for better performance)
 - **Calculate Metrics Checkbox:** Enable/disable metric calculations (unchecked by default for faster loading)
 
@@ -123,33 +124,10 @@ When you have exactly **2 images** loaded, you can enable **Curtain Mode** for a
   - `-`: Zoom out
 
 #### Use Cases:
-- **Before/After Processing:** Compare original vs processed images
-- **Method Comparison:** Compare results from two different algorithms
-- **Quality Assessment:** Evaluate image enhancement or restoration results
-- **Research Analysis:** Side-by-side comparison for academic presentations
-
-
-#### Sample Terminal Output:
-When you check the "Calculate Metrics" box, you'll see output like this in your terminal:
-
-```
-Starting metrics calculation in background...
-
---- Metrics Calculation ---
-Ground Truth: GT
-========================================
-Metrics for Input:
-  PSNR: 22.11 dB
-  SSIM: 0.6433
-  LPIPS: 0.3732
-------------------------------
-Metrics for Output:
-  PSNR: 23.54 dB
-  SSIM: 0.7222
-  LPIPS: 0.1128
-------------------------------
-Metrics calculation completed!
-```
+- **Design Reviews:** Compare different versions of UI designs
+- **Image Quality Analysis:** Evaluate compression or filtering effects  
+- **Research & Development:** Analyze algorithm improvements side-by-side
+- **Photo Editing:** Compare before/after effects in detail
 
 #### Supported Metrics:
 - **PSNR (Peak Signal-to-Noise Ratio):** Measures image quality in decibels (dB)
