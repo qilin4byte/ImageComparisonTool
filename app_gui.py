@@ -13,16 +13,9 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QCheckBox,
     QApplication,
-    QHBoxLayout,
-    QLabel,
     QMainWindow,
-    QPushButton,
-    QVBoxLayout,
-    QWidget,
-    QComboBox,
-    QCheckBox,
-    QMessageBox,
     QGridLayout,
+    QLineEdit,
 )
 from PySide6.QtCore import QThread, Signal
 from image_view import ImageView
@@ -30,6 +23,12 @@ from graphics_view import GraphicsView
 from curtain_view import CurtainComparisonWidget
 from metrics import ImageMetrics
 import math
+import os
+import glob
+from PIL import Image
+from PIL.ImageQt import ImageQt
+from PySide6.QtGui import QPixmap
+from diff_calculator import ImageDiffCalculator
 
 
 class MetricsCalculationThread(QThread):
@@ -90,13 +89,46 @@ class AppGui(QVBoxLayout):
         self.metrics_thread = None
 
         self.image_views = []
-        
+
         # Curtain comparison mode
         self.curtain_widget = None
         self.is_curtain_mode = False
+        
+        # Folder comparison mode
+        self.is_folder_mode = False
+        self.folder_left_path = None
+        self.folder_right_path = None
+        self.folder_image_list = []  # List of (left_image, right_image) tuples
+        self.current_folder_index = 0
+        
+        # Flag to temporarily disable curtain availability updates during loading
+        self.loading_images = False
 
         # Top bar
         self.top_settings_layout = QHBoxLayout()
+        
+        # Folder comparison controls (will be added to bottom layout later)
+        self.folder_mode_checkbox = QCheckBox("Folder Compare Mode")
+        self.folder_mode_checkbox.setChecked(False)
+        self.folder_mode_checkbox.stateChanged.connect(self.toggle_folder_mode)
+        
+        self.select_folder_left_button = QPushButton("Select Left Folder")
+        self.select_folder_left_button.clicked.connect(self.select_left_folder)
+        self.select_folder_left_button.setEnabled(False)
+        
+        self.select_folder_right_button = QPushButton("Select Right Folder")
+        self.select_folder_right_button.clicked.connect(self.select_right_folder)
+        self.select_folder_right_button.setEnabled(False)
+        
+        self.prev_button = QPushButton("◀ Previous")
+        self.prev_button.clicked.connect(self.navigate_previous)
+        self.prev_button.setEnabled(False)
+        
+        self.next_button = QPushButton("Next ▶")
+        self.next_button.clicked.connect(self.navigate_next)
+        self.next_button.setEnabled(False)
+        
+        self.image_counter_label = QLabel("0 / 0")
 
         # Change resolution based on selected images
         self.resolution_label = QLabel("Resolution")
@@ -120,7 +152,7 @@ class AppGui(QVBoxLayout):
         self.diff_checkbox.setChecked(False)
         self.diff_checkbox.setEnabled(False)  # Will be enabled when exactly 2 images
         self.diff_checkbox.stateChanged.connect(self.toggle_diff_panel)
-        
+
         # Antialiasing checkbox
         self.antialiasing_checkbox = QCheckBox("Antialiasing")
         self.antialiasing_checkbox.setChecked(False)  # Set default to unchecked
@@ -148,7 +180,7 @@ class AppGui(QVBoxLayout):
         self.image_views_layout = QGridLayout()
         self.image_views_layout.setSpacing(0)
         self.images_widget.setLayout(self.image_views_layout)
-        
+
         # Keep track of the original images widget for restoration
         self.original_images_widget = self.images_widget
 
@@ -169,13 +201,37 @@ class AppGui(QVBoxLayout):
         self.add_remove_image_layout.addWidget(self.add_button)
         self.add_remove_image_layout.addStretch()
 
-        # Bottom bar
-        self.bottom_settings_layout = QHBoxLayout()
-
         self.addLayout(self.top_settings_layout)
+
+        # Image viewing area
         self.addWidget(self.images_widget)
-        self.addLayout(self.add_remove_image_layout)
-        self.addLayout(self.bottom_settings_layout)
+        
+        # Bottom bar with folder controls and add/remove buttons
+        self.bottom_controls_layout = QHBoxLayout()
+        
+        # Add folder controls to bottom bar
+        self.bottom_controls_layout.addWidget(self.folder_mode_checkbox)
+        self.bottom_controls_layout.addWidget(self.select_folder_left_button)
+        self.bottom_controls_layout.addWidget(self.select_folder_right_button)
+        self.bottom_controls_layout.addWidget(self.prev_button)
+        self.bottom_controls_layout.addWidget(self.image_counter_label)
+        self.bottom_controls_layout.addWidget(self.next_button)
+        
+        # Add some space before the +/- buttons
+        self.bottom_controls_layout.addStretch()
+        
+        # Add a label to make the +/- buttons more obvious
+        add_remove_label = QLabel("Add/Remove:")
+        self.bottom_controls_layout.addWidget(add_remove_label)
+        
+        # Add the +/- buttons with some spacing
+        self.bottom_controls_layout.addWidget(self.remove_button)
+        self.bottom_controls_layout.addWidget(self.add_button)
+        
+        # Add final stretch to balance the layout
+        self.bottom_controls_layout.addStretch()
+        
+        self.addLayout(self.bottom_controls_layout)
 
         # Add reference to diff panel
         self.diff_panel = None
@@ -550,7 +606,6 @@ class AppGui(QVBoxLayout):
             print("Calculating difference image for grid panel...")
             
             # Calculate difference using our diff calculator
-            from diff_calculator import ImageDiffCalculator
             diff_calc = ImageDiffCalculator()
             diff_pil_image = diff_calc.calculate_diff(img1_path, img2_path)
             
@@ -562,14 +617,10 @@ class AppGui(QVBoxLayout):
                 return
             
             # Convert PIL Image to QPixmap
-            from PIL.ImageQt import ImageQt
-            from PySide6.QtGui import QPixmap
-            from PySide6.QtCore import Qt
             diff_qt_image = ImageQt(diff_pil_image)
             diff_pixmap = QPixmap.fromImage(diff_qt_image)
             
             # Create a new graphics view for the difference
-            from graphics_view import GraphicsView
             self.diff_panel = GraphicsView(color="#e74c3c", name="Differences", text_color="#f9f9f9")
             
             # Set the difference image by directly adding to scene
@@ -739,6 +790,10 @@ class AppGui(QVBoxLayout):
 
     def update_curtain_availability(self):
         """Update availability of curtain mode and diff panel based on number of images."""
+        # Skip updates during image loading to prevent interference with mode restoration
+        if self.loading_images:
+            return
+            
         # Only count non-diff panels for curtain mode availability
         non_diff_panels = [view for view in self.image_views if view != self.diff_panel]
         has_exactly_two = len(non_diff_panels) == 2
@@ -774,6 +829,251 @@ class AppGui(QVBoxLayout):
                 self.diff_checkbox.blockSignals(False)
                 self.remove_diff_panel()
 
+    # Folder comparison methods
+    def toggle_folder_mode(self, state):
+        """Toggle folder comparison mode."""
+        self.is_folder_mode = state == Qt.Checked.value
+        
+        if self.is_folder_mode:
+            # Enable folder selection buttons
+            self.select_folder_left_button.setEnabled(True)
+            self.select_folder_right_button.setEnabled(True)
+            
+            # Disable other modes
+            self.curtain_checkbox.setEnabled(False)
+            self.add_button.setEnabled(False)
+            self.remove_button.setEnabled(False)
+            self.layout_combo.setEnabled(False)
+            
+            # Clear existing images
+            self.clear_all_images()
+        else:
+            # Disable folder controls
+            self.select_folder_left_button.setEnabled(False)
+            self.select_folder_right_button.setEnabled(False)
+            self.prev_button.setEnabled(False)
+            self.next_button.setEnabled(False)
+            
+            # Re-enable other controls
+            self.add_button.setEnabled(True)
+            self.remove_button.setEnabled(True)
+            self.layout_combo.setEnabled(True)
+            
+            # Clear folder data
+            self.folder_left_path = None
+            self.folder_right_path = None
+            self.folder_image_list = []
+            self.current_folder_index = 0
+            self.update_image_counter()
+            
+            # Update other mode availability
+            self.update_curtain_availability()
+    
+    def select_left_folder(self):
+        """Select the left folder for comparison."""
+        folder_path = QFileDialog.getExistingDirectory(
+            None, "Select Left Folder", 
+            self.folder_left_path or os.path.expanduser("~")
+        )
+        if folder_path:
+            self.folder_left_path = folder_path
+            self.select_folder_left_button.setText(f"Left: {os.path.basename(folder_path)}")
+            self.check_folders_and_load()
+    
+    def select_right_folder(self):
+        """Select the right folder for comparison."""
+        folder_path = QFileDialog.getExistingDirectory(
+            None, "Select Right Folder",
+            self.folder_right_path or os.path.expanduser("~")
+        )
+        if folder_path:
+            self.folder_right_path = folder_path
+            self.select_folder_right_button.setText(f"Right: {os.path.basename(folder_path)}")
+            self.check_folders_and_load()
+    
+    def check_folders_and_load(self):
+        """Check if both folders are selected and load matching images."""
+        if not self.folder_left_path or not self.folder_right_path:
+            return
+        
+        # Get image files from both folders
+        image_extensions = ['*.jpg', '*.jpeg', '*.png', '*.bmp', '*.tiff', '*.tif', '*.gif']
+        
+        left_images = []
+        right_images = []
+        
+        for ext in image_extensions:
+            left_images.extend(glob.glob(os.path.join(self.folder_left_path, ext)))
+            left_images.extend(glob.glob(os.path.join(self.folder_left_path, ext.upper())))
+            right_images.extend(glob.glob(os.path.join(self.folder_right_path, ext)))
+            right_images.extend(glob.glob(os.path.join(self.folder_right_path, ext.upper())))
+        
+        # Sort by filename for consistent ordering
+        left_images.sort(key=lambda x: os.path.basename(x).lower())
+        right_images.sort(key=lambda x: os.path.basename(x).lower())
+        
+        if not left_images or not right_images:
+            QMessageBox.warning(None, "No Images Found", 
+                              "No compatible images found in one or both folders.")
+            return
+        
+        # Create matched pairs (by filename or index)
+        self.folder_image_list = self.match_images(left_images, right_images)
+        
+        if not self.folder_image_list:
+            QMessageBox.warning(None, "No Matching Images", 
+                              "No matching image pairs found between folders.")
+            return
+        
+        self.current_folder_index = 0
+        self.load_current_folder_images()
+        self.update_navigation_buttons()
+        self.update_image_counter()
+    
+    def match_images(self, left_images, right_images):
+        """Match images from both folders by filename or index."""
+        matched_pairs = []
+        
+        # First try to match by filename (without extension)
+        left_basenames = {os.path.splitext(os.path.basename(img))[0]: img for img in left_images}
+        right_basenames = {os.path.splitext(os.path.basename(img))[0]: img for img in right_images}
+        
+        # Find common basenames
+        common_names = set(left_basenames.keys()) & set(right_basenames.keys())
+        
+        if common_names:
+            # Match by filename
+            for name in sorted(common_names):
+                matched_pairs.append((left_basenames[name], right_basenames[name]))
+        else:
+            # Match by index if no common names
+            min_count = min(len(left_images), len(right_images))
+            for i in range(min_count):
+                matched_pairs.append((left_images[i], right_images[i]))
+        
+        return matched_pairs
+    
+    def load_current_folder_images(self):
+        """Load the current pair of images from folders."""
+        if not self.folder_image_list or self.current_folder_index >= len(self.folder_image_list):
+            return
+        
+        left_path, right_path = self.folder_image_list[self.current_folder_index]
+        
+        # Remember current curtain mode state before clearing images
+        was_in_curtain_mode = self.is_curtain_mode
+        
+        # Set loading flag to prevent curtain availability updates during loading
+        self.loading_images = True
+        
+        # Clear existing images
+        self.clear_all_images()
+        
+        # Create exactly 2 image views for folder comparison
+        left_name = os.path.splitext(os.path.basename(left_path))[0]
+        right_name = os.path.splitext(os.path.basename(right_path))[0]
+        
+        # Use the existing add_image_view method to ensure proper setup
+        self.add_image_view(color="#2C3E50", name=f"Left: {left_name}", text_color="#f9f9f9")
+        self.add_image_view(color="#00695C", name=f"Right: {right_name}", text_color="#f9f9f9")
+        
+        # Load the images into the views
+        if len(self.image_views) >= 2:
+            self.image_views[0].image_view.loadImage(left_path)
+            self.image_views[1].image_view.loadImage(right_path)
+            
+            # Apply current antialiasing setting
+            self.image_views[0].image_view.set_antialiasing(self.antialiasing_checkbox.isChecked())
+            self.image_views[1].image_view.set_antialiasing(self.antialiasing_checkbox.isChecked())
+        
+        # Clear loading flag now that we're done loading
+        self.loading_images = False
+        
+        # Enable curtain mode for folder comparison
+        self.curtain_checkbox.setEnabled(True)
+        
+        # If we were in curtain mode before, restore curtain mode with new images
+        if was_in_curtain_mode:
+            # Make sure the checkbox reflects the curtain mode state
+            self.curtain_checkbox.blockSignals(True)
+            self.curtain_checkbox.setChecked(True)
+            self.curtain_checkbox.blockSignals(False)
+            
+            # Switch to curtain mode with the new images
+            self.switch_to_curtain_mode()
+        else:
+            # Arrange in 1x2 layout only if not switching to curtain mode
+            self.arrange_panels_in_grid(1, 2)
+        
+        # Note: slider_sync will be handled automatically by the image views
+    
+    def update_curtain_widget_images(self, left_path, right_path, left_name, right_name):
+        """Update the curtain widget with new image paths."""
+        if self.curtain_widget:
+            self.curtain_widget.set_images(left_path, right_path, f"Left: {left_name}", f"Right: {right_name}")
+    
+    def navigate_previous(self):
+        """Navigate to the previous image pair."""
+        if self.current_folder_index > 0:
+            self.current_folder_index -= 1
+            self.load_current_folder_images()
+            self.update_navigation_buttons()
+            self.update_image_counter()
+    
+    def navigate_next(self):
+        """Navigate to the next image pair."""
+        if self.current_folder_index < len(self.folder_image_list) - 1:
+            self.current_folder_index += 1
+            self.load_current_folder_images()
+            self.update_navigation_buttons()
+            self.update_image_counter()
+    
+    def update_navigation_buttons(self):
+        """Update the state of navigation buttons."""
+        has_images = len(self.folder_image_list) > 0
+        can_go_prev = has_images and self.current_folder_index > 0
+        can_go_next = has_images and self.current_folder_index < len(self.folder_image_list) - 1
+        
+        self.prev_button.setEnabled(can_go_prev)
+        self.next_button.setEnabled(can_go_next)
+    
+    def update_image_counter(self):
+        """Update the image counter display."""
+        if self.folder_image_list:
+            current = self.current_folder_index + 1
+            total = len(self.folder_image_list)
+            self.image_counter_label.setText(f"{current} / {total}")
+        else:
+            self.image_counter_label.setText("0 / 0")
+    
+    def clear_all_images(self):
+        """Clear all current image views."""
+        # Remove all items from the grid layout
+        while self.image_views_layout.count():
+            child = self.image_views_layout.takeAt(0)
+            if child.layout():
+                # If it's a layout, delete it
+                self.delete_layout(child.layout())
+            elif child.widget():
+                # If it's a widget, delete it
+                child.widget().deleteLater()
+        
+        # Clear the image views list
+        self.image_views.clear()
+        self.is_showing_diff_panel = False
+        self.diff_panel = None
+    
+    def delete_layout(self, layout):
+        """Recursively delete a layout and all its children."""
+        if layout is not None:
+            while layout.count():
+                child = layout.takeAt(0)
+                if child.layout():
+                    self.delete_layout(child.layout())
+                elif child.widget():
+                    child.widget().deleteLater()
+            layout.deleteLater()
+
     def save_comparison(self):
         file_dialog = QFileDialog()
         file_dialog.setNameFilter("JPEG Image Files (*.jpg)")
@@ -786,3 +1086,21 @@ class AppGui(QVBoxLayout):
             screenshot = self.images_widget.grab()
             screenshot.save(file_path, "jpg")
             print(f"Saved screenshot as {file_path}")
+
+    def keyPressEvent(self, event):
+        """Handle keyboard events for folder navigation."""
+        if self.is_folder_mode and self.folder_image_list:
+            if event.key() == Qt.Key_Left or event.key() == Qt.Key_A:
+                self.navigate_previous()
+            elif event.key() == Qt.Key_Right or event.key() == Qt.Key_D:
+                self.navigate_next()
+            elif event.key() == Qt.Key_Home:
+                self.current_folder_index = 0
+                self.load_current_folder_images()
+                self.update_navigation_buttons()
+                self.update_image_counter()
+            elif event.key() == Qt.Key_End:
+                self.current_folder_index = len(self.folder_image_list) - 1
+                self.load_current_folder_images()
+                self.update_navigation_buttons()
+                self.update_image_counter()

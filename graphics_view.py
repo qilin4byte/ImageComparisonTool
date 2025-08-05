@@ -40,8 +40,8 @@ class GraphicsView(QVBoxLayout):
                     "#1C1C1C",  # almost black
                     "#7B241C",  # rich red brown (NEW — matches red detail in image)
                     "#512D38",  # muted wine (NEW — elegant reddish tone)
-                ]
-            )
+            ]
+        )
         font = QFont("Arial")  # Use a more commonly available font
         font.setBold(True)
         font.setPointSize(16)  # Slightly larger font size for better readability
