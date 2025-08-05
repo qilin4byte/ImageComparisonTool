@@ -62,23 +62,28 @@ class ImageView(QGraphicsView):
         )
 
     def loadImage(self, file_path):
-        img = Image.open(file_path)
-        img = ImageQt(img)
-        pixmap = QPixmap.fromImage(img)
-        if pixmap.width() == 0:
+        try:
+            img = Image.open(file_path)
+            img = ImageQt(img)
+            pixmap = QPixmap.fromImage(img)
+            if pixmap.width() == 0:
+                QMessageBox.critical(
+                    self, "Error", "Unable to load the image.", QMessageBox.Ok
+                )
+                return
+
+            if self.scene().items():
+                self.scene().removeItem(self.scene().items()[0])
+
+            self.original_image = pixmap
+            pixmap_item = self.scene().addPixmap(pixmap)
+            pixmap_item.setTransformationMode(Qt.SmoothTransformation)
+            self.photoAdded.emit(pixmap.width(), pixmap.height())
+            self.url = file_path
+        except Exception as e:
             QMessageBox.critical(
-                self, "Error", "Unable to load the image.", QMessageBox.Ok
+                self, "Error", f"Failed to load image: {str(e)}", QMessageBox.Ok
             )
-            return
-
-        if self.scene().items():
-            self.scene().removeItem(self.scene().items()[0])
-
-        self.original_image = pixmap
-        pixmap_item = self.scene().addPixmap(pixmap)
-        pixmap_item.setTransformationMode(Qt.SmoothTransformation)
-        self.photoAdded.emit(pixmap.width(), pixmap.height())
-        self.url = file_path
 
     def set_transform(self, transform):
         horz_blocked = self.horizontalScrollBar().blockSignals(True)

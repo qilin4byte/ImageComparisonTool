@@ -20,11 +20,27 @@ class ImageMetrics:
     def calculate_psnr(self, img1_path, img2_path):
         img1 = np.array(Image.open(img1_path))
         img2 = np.array(Image.open(img2_path))
+        
+        # Ensure both images have the same size
+        if img1.shape != img2.shape:
+            # Resize img2 to match img1's size
+            img2_pil = Image.fromarray(img2)
+            img2_pil = img2_pil.resize((img1.shape[1], img1.shape[0]), Image.Resampling.LANCZOS)
+            img2 = np.array(img2_pil)
+        
         return psnr(img1, img2, data_range=img1.max() - img1.min())
 
     def calculate_ssim(self, img1_path, img2_path):
         img1 = np.array(Image.open(img1_path))
         img2 = np.array(Image.open(img2_path))
+        
+        # Ensure both images have the same size
+        if img1.shape != img2.shape:
+            # Resize img2 to match img1's size
+            img2_pil = Image.fromarray(img2)
+            img2_pil = img2_pil.resize((img1.shape[1], img1.shape[0]), Image.Resampling.LANCZOS)
+            img2 = np.array(img2_pil)
+        
         return ssim(img1, img2, data_range=img1.max() - img1.min(), channel_axis=2)
 
     def calculate_lpips(self, img1_path, img2_path):
